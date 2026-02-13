@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-DB_PATH = os.path.expanduser("~/sf-weather.db")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sf-weather.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS readings (

@@ -7,7 +7,7 @@ Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates
 ## What it does
 
 - **Scrapes** temp and humidity for ~50 SF neighborhoods every 4 hours via cron
-- **Stores** readings in a local SQLite database (`~/sf-weather.db`)
+- **Stores** readings in a local SQLite database (`sf-weather.db` in the project directory)
 - **Serves** a dark-themed dashboard on port 8080 with:
   - City-wide averages and temperature spread
   - Sortable table of all neighborhoods (click a row to see its history chart)
@@ -28,13 +28,19 @@ sf-weather-dashboard/
     map.html      # Interactive neighborhood map (Leaflet.js)
 ```
 
+## How the data works
+
+The scraper runs every 4 hours via cron and inserts one row per neighborhood into the `readings` table. This is the actual weather data that powers the dashboard and charts. Over time, readings accumulate — after a day you'll have ~6 data points per neighborhood, after a week ~42, etc.
+
+There's also a `scrape_log` table that records metadata about each scrape run (how many neighborhoods reported, which were skipped). This is for operational debugging, not displayed on the dashboard.
+
 ## API endpoints
 
 | Endpoint | Description |
 |---|---|
 | `GET /api/latest` | Latest reading for every active neighborhood |
 | `GET /api/history?neighborhood=noe_valley&days=7` | Historical readings for one neighborhood |
-| `GET /api/status` | Last scrape time, total scrape count |
+| `GET /api/status` | Last scrape metadata and total scrape count |
 | `GET /api/city-summary?days=7` | Daily city-wide averages |
 
 ## Requirements
@@ -61,53 +67,62 @@ uv run python dashboard.py  # start dashboard at http://localhost:8080
 
 ### First-time setup
 
-1. Clone the repo on the Pi:
+SSH into the Pi, then run:
 
 ```bash
-ssh pi 'git clone <repo-url> ~/sf-weather-dashboard'
+git clone <repo-url> ~/sf-weather-dashboard
+cd ~/sf-weather-dashboard
+./setup.sh
 ```
 
-2. Run the setup script:
+The setup script requires sudo for the systemd steps and will prompt for your password. Do **not** run it as `sudo ./setup.sh` — that changes `$HOME` and breaks all the paths.
 
-```bash
-ssh pi 'bash ~/sf-weather-dashboard/setup.sh'
-```
-
-This will:
+The script will:
 - Install `uv` if not already present
 - Create a virtualenv and install Flask
 - Initialize the SQLite database
 - Set up a **cron job** to scrape every 4 hours
 - Create and start a **systemd service** (`sf-weather-dashboard`) on port 8080
+- Run an initial scrape so the dashboard has data immediately
 
-3. Verify it's running:
+Verify it's running:
 
 ```bash
-ssh pi 'systemctl status sf-weather-dashboard'
+systemctl status sf-weather-dashboard
 ```
 
-Then open `http://<pi-ip>:8080` in your browser.
+Then open `http://<pi-ip>:8080` from any browser on your network.
 
 ### Updating
 
-Pull the latest changes and restart:
+SSH into the Pi, then:
 
 ```bash
-ssh pi 'cd ~/sf-weather-dashboard && git pull && sudo systemctl restart sf-weather-dashboard'
+cd ~/sf-weather-dashboard
+git pull
+sudo systemctl restart sf-weather-dashboard
 ```
 
 ### Useful commands
 
+Run these on the Pi:
+
 ```bash
 # Check dashboard logs
-ssh pi 'journalctl -u sf-weather-dashboard -f'
+journalctl -u sf-weather-dashboard -f
 
 # Manually trigger a scrape
-ssh pi 'cd ~/sf-weather-dashboard && uv run python scrape.py'
+cd ~/sf-weather-dashboard && uv run python scrape.py
 
 # Check cron is set up
-ssh pi 'crontab -l | grep scrape'
+crontab -l | grep scrape
 
 # Restart the dashboard
-ssh pi 'sudo systemctl restart sf-weather-dashboard'
+sudo systemctl restart sf-weather-dashboard
+
+# Check scrape_log (did scrapes run? any skipped neighborhoods?)
+cd ~/sf-weather-dashboard && uv run python -c "from db import get_db; [print(dict(r)) for r in get_db().execute('SELECT * FROM scrape_log ORDER BY id DESC LIMIT 10')]"
+
+# View raw cron output
+cat ~/sf-weather-dashboard/scrape.log
 ```
