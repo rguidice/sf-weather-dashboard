@@ -1,5 +1,7 @@
 # SF Microclimate Weather Dashboard
 
+**Written using Claude Code running Opus 4.6**
+
 Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates API](https://microclimates.solofounders.com/sf-weather) and serves a local dashboard. Designed to run on a Raspberry Pi on your home network.
 
 ## What it does
