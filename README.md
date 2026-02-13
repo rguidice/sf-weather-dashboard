@@ -8,7 +8,7 @@ Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates
 
 - **Scrapes** temp and humidity for ~50 SF neighborhoods every 4 hours via cron
 - **Stores** readings in a local SQLite database (`sf-weather.db` in the project directory)
-- **Serves** a dark-themed dashboard on port 8080 with:
+- **Serves** a dark-themed dashboard accessible at `http://weather.local` with:
   - City-wide averages and temperature spread
   - Sortable table of all neighborhoods (click a row to see its history chart)
   - Historical temp/humidity charts (7d / 14d / 30d)
@@ -26,6 +26,7 @@ sf-weather-dashboard/
   static/
     index.html    # Main dashboard page
     map.html      # Interactive neighborhood map (Leaflet.js)
+  mdns_alias.py   # Publishes weather.local mDNS CNAME via Avahi D-Bus API
 ```
 
 ## How the data works
@@ -82,16 +83,33 @@ The script will:
 - Create a virtualenv and install Flask
 - Initialize the SQLite database
 - Set up a **cron job** to scrape every 4 hours
-- Create and start a **systemd service** (`sf-weather-dashboard`) on port 8080
+- Create and start a **systemd service** (Flask on port 8080)
+- **Redirect port 80 → 8080** via iptables so no port suffix is needed in URLs (see options below)
+- Set up an **mDNS alias** so `http://weather.local` works from any device on your network (see options below)
 - Run an initial scrape so the dashboard has data immediately
 
-Verify it's running:
+#### Setup options
+
+By default the setup script modifies your Pi's networking config to make the dashboard easy to access. **If you're already using port 80 or have custom iptables rules, use the flags below to skip those steps.**
+
+| Flag | What it skips | When to use it |
+|---|---|---|
+| `--skip-redirect` | Skips the iptables rule that redirects port 80 → 8080, and skips installing `iptables-persistent`. **Your existing iptables rules will not be touched.** Dashboard will only be available on port 8080. | You already have something on port 80, or you manage iptables yourself |
+| `--skip-mdns` | Skips installing `python3-dbus` and the weather-mdns systemd service. `weather.local` will not resolve. | You don't want mDNS, or you manage DNS another way |
+
+Example with both skipped:
+
+```bash
+./setup.sh --skip-redirect --skip-mdns
+```
+
+### Verify it's running
 
 ```bash
 systemctl status sf-weather-dashboard
 ```
 
-Then open `http://<pi-ip>:8080` from any browser on your network.
+Then open `http://weather.local` (or `http://<pi-ip>` if you used `--skip-mdns`) from any browser on your network. If you used `--skip-redirect`, add `:8080` to the URL.
 
 ### Updating
 

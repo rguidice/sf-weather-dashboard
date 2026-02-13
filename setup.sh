@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 # One-time setup on Raspberry Pi. SSH in first, then run: ./setup.sh
+# Options: --skip-mdns (no weather.local alias), --skip-redirect (no port 80 redirect)
 set -euo pipefail
 
 die() { echo "FATAL: $*" >&2; exit 1; }
+
+SKIP_MDNS=false
+SKIP_REDIRECT=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-mdns) SKIP_MDNS=true ;;
+    --skip-redirect) SKIP_REDIRECT=true ;;
+    *) die "Unknown option: $arg" ;;
+  esac
+done
 
 PROJECT_DIR="$HOME/sf-weather-dashboard"
 [ -d "$PROJECT_DIR" ] || die "Project directory not found: $PROJECT_DIR"
@@ -62,9 +73,56 @@ sudo systemctl daemon-reload || die "Failed to reload systemd"
 sudo systemctl enable sf-weather-dashboard || die "Failed to enable service"
 sudo systemctl start sf-weather-dashboard || die "Failed to start service"
 
+# --- mDNS alias (weather.local) ---
+if [ "$SKIP_MDNS" = false ]; then
+  echo "==> Setting up mDNS alias (weather.local)"
+  sudo apt-get install -y python3-dbus || die "Failed to install python3-dbus"
+
+  cat <<EOF | sudo tee /etc/systemd/system/weather-mdns.service > /dev/null || die "Failed to write mDNS service"
+[Unit]
+Description=Publish weather.local mDNS alias
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $PROJECT_DIR/mdns_alias.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo systemctl daemon-reload || die "Failed to reload systemd"
+  sudo systemctl enable weather-mdns || die "Failed to enable mDNS service"
+  sudo systemctl restart weather-mdns || die "Failed to start mDNS service"
+  echo "    weather.local is now available on your network"
+else
+  echo "==> Skipping mDNS alias setup (--skip-mdns)"
+fi
+
+# --- Port 80 redirect ---
+if [ "$SKIP_REDIRECT" = false ]; then
+  echo "==> Setting up port 80 -> 8080 redirect"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables iptables-persistent || die "Failed to install iptables"
+  sudo iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080 2>/dev/null \
+    || sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8080 \
+    || die "Failed to add iptables redirect"
+  sudo netfilter-persistent save || die "Failed to save iptables rules"
+else
+  echo "==> Skipping port 80 redirect (--skip-redirect)"
+fi
+
 # --- Initial scrape ---
 echo "==> Running initial scrape"
 uv run python scrape.py || die "Initial scrape failed"
 
-echo "==> Done! Dashboard running on port 8080"
-echo "    View at http://$(hostname -I | awk '{print $1}'):8080"
+IP_ADDR=$(hostname -I | awk '{print $1}')
+PORT=$( [ "$SKIP_REDIRECT" = false ] && echo "80" || echo "8080" )
+echo ""
+echo "==> Done! Dashboard running on port $PORT"
+echo "    http://$IP_ADDR$( [ "$PORT" != "80" ] && echo ":$PORT" )"
+if [ "$SKIP_MDNS" = false ]; then
+  echo "    http://weather.local$( [ "$PORT" != "80" ] && echo ":$PORT" )"
+fi
