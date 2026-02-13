@@ -42,7 +42,28 @@ There's also a `scrape_log` table that records metadata about each scrape run (h
 | `GET /api/latest` | Latest reading for every active neighborhood |
 | `GET /api/history?neighborhood=noe_valley&days=7` | Historical readings for one neighborhood |
 | `GET /api/status` | Last scrape metadata and total scrape count |
+| `GET /api/config` | Server-side config (favorite neighborhood) |
 | `GET /api/city-summary?days=7` | Daily city-wide averages |
+
+## Favorite neighborhood
+
+You can configure a "home" neighborhood that gets highlighted on the dashboard for every device on your network. Edit `config.json` in the project directory:
+
+```json
+{
+  "favorite_neighborhood": "mission"
+}
+```
+
+The value must be a valid neighborhood key (snake_case, matching the API — e.g. `mission`, `noe_valley`, `pacific_heights`). When set:
+
+- A **"My Neighborhood" card** appears at the top of the dashboard showing current temp, humidity, and sensor count
+- The neighborhood row is **highlighted** in the table with a blue accent border
+- The **history chart** defaults to the favorite neighborhood
+
+`setup.sh` creates `config.json` from `config.example.json` automatically (default: `mission`). The file is gitignored since it's a per-installation preference. Edits take effect on the next page refresh (no server restart needed).
+
+To disable, set `favorite_neighborhood` to `""`, delete `config.json`, or remove the key entirely.
 
 ## Requirements
 

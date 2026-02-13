@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Flask dashboard for SF microclimate weather data."""
 
+import json
+import os
+
 from flask import Flask, jsonify, request, send_from_directory
 
 from db import get_db, init_db
+
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 app = Flask(__name__, static_folder="static")
 
@@ -66,6 +71,16 @@ def api_status():
         "last_scrape": dict(last) if last else None,
         "total_scrapes": total["cnt"] if total else 0,
     })
+
+
+@app.route("/api/config")
+def api_config():
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = json.load(f)
+        return jsonify({"favorite_neighborhood": cfg.get("favorite_neighborhood", "")})
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        return jsonify({})
 
 
 @app.route("/api/city-summary")

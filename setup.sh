@@ -30,6 +30,15 @@ if ! command -v uv &>/dev/null; then
 fi
 command -v uv &>/dev/null || die "uv not found in PATH after install. Check ~/.local/bin/"
 
+# --- Config file ---
+echo "==> Setting up config.json"
+if [ ! -f "$PROJECT_DIR/config.json" ]; then
+  cp "$PROJECT_DIR/config.example.json" "$PROJECT_DIR/config.json"
+  echo "    Copied config.example.json -> config.json"
+else
+  echo "    config.json already exists, skipping"
+fi
+
 # --- Install Python dependencies ---
 echo "==> Setting up venv and installing dependencies"
 cd "$PROJECT_DIR"

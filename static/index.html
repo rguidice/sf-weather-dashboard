@@ -34,7 +34,8 @@
 
   /* Cards */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+  .grid.has-fav { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 768px) { .grid, .grid.has-fav { grid-template-columns: 1fr; } }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -77,6 +78,9 @@
   .legend { padding: 8px 20px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
   .legend span { color: #f59e0b; }
   .clickable { cursor: pointer; }
+  tr.pinned-row { background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--accent); }
+  tr.pinned-row td:first-child { padding-left: 17px; }
+  tr.pinned-row + tr td { border-top: 2px solid var(--border); }
 
   /* Not reporting */
   .not-reporting {
@@ -137,6 +141,11 @@
   </header>
 
   <div class="grid">
+    <div class="card" id="fav-card" style="display:none">
+      <h2 id="fav-card-title">My Neighborhood</h2>
+      <div class="stat" id="fav-temp">--</div>
+      <div style="color:var(--muted);font-size:0.85rem" id="fav-detail">--</div>
+    </div>
     <div class="card">
       <h2>City Average</h2>
       <div class="stat" id="city-avg-temp">--</div>
@@ -229,12 +238,16 @@ let activeNeighborhoods = [];
 let latestData = [];
 let sortKey = 'temp_f';
 let sortAsc = false;
+let favoriteNeighborhood = null;
 
 async function loadLatest() {
-  const [latest, status] = await Promise.all([
+  const [latest, status, cfg] = await Promise.all([
     fetch('/api/latest').then(r => r.json()),
-    fetch('/api/status').then(r => r.json())
+    fetch('/api/status').then(r => r.json()),
+    fetch('/api/config').then(r => r.json()).catch(() => ({}))
   ]);
+
+  favoriteNeighborhood = cfg.favorite_neighborhood || null;
 
   if (status.last_scrape) {
     document.getElementById('updated-time').textContent = status.last_scrape.created_at_pacific || relTime(status.last_scrape.created_at);
@@ -257,6 +270,17 @@ async function loadLatest() {
   document.getElementById('temp-range').textContent = (maxT - minT) + '\u00B0F spread';
   document.getElementById('range-detail').textContent = minT + '\u00B0F \u2013 ' + maxT + '\u00B0F';
 
+  // Favorite neighborhood card
+  const favData = favoriteNeighborhood ? latest.find(r => r.neighborhood === favoriteNeighborhood) : null;
+  if (favData) {
+    document.getElementById('fav-card').style.display = '';
+    document.querySelector('.grid').classList.add('has-fav');
+    document.getElementById('fav-card-title').textContent = name(favoriteNeighborhood);
+    document.getElementById('fav-temp').style.color = tempColor(favData.temp_f);
+    document.getElementById('fav-temp').textContent = favData.temp_f + '\u00B0F';
+    document.getElementById('fav-detail').textContent = favData.humidity + '% humidity \u00B7 ' + favData.sensor_count + ' sensors';
+  }
+
   latestData = latest;
   renderTable();
 
@@ -273,7 +297,10 @@ async function loadLatest() {
   // Populate select
   const sel = document.getElementById('chart-hood');
   sel.innerHTML = activeNeighborhoods.map(k => `<option value="${k}">${name(k)}</option>`).join('');
-  loadHistory(activeNeighborhoods[0], selectedDays);
+  const defaultHood = (favoriteNeighborhood && activeNeighborhoods.includes(favoriteNeighborhood))
+    ? favoriteNeighborhood : activeNeighborhoods[0];
+  sel.value = defaultHood;
+  loadHistory(defaultHood, selectedDays);
 }
 
 async function loadHistory(neighborhood, days) {
@@ -340,14 +367,15 @@ function renderTable() {
   });
 
   const tbody = document.getElementById('readings-body');
-  tbody.innerHTML = sorted.map(r => `
-    <tr class="clickable" data-hood="${r.neighborhood}">
+  tbody.innerHTML = sorted.map(r => {
+    const pinned = favoriteNeighborhood && r.neighborhood === favoriteNeighborhood;
+    return `<tr class="clickable${pinned ? ' pinned-row' : ''}" data-hood="${r.neighborhood}">
       <td>${name(r.neighborhood)}</td>
       <td class="temp-cell" style="color:${tempColor(r.temp_f)}">${r.temp_f}\u00B0F${r.outlier_corrected ? '<span class="corrected" title="Outlier corrected — original sensor reading was replaced with neighbor/city average">*</span>' : ''}</td>
       <td>${r.humidity}%</td>
       <td><span class="sensor-badge">${r.sensor_count}</span></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   tbody.querySelectorAll('tr').forEach(tr => {
     tr.addEventListener('click', () => {

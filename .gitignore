@@ -17,6 +17,9 @@ wheels/
 .env
 .DS_Store
 
+# User config
+config.json
+
 # IDE / tools
 .claude/
 NOTES.md
