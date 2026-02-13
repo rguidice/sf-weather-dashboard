@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SF Weather Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  header h1 { font-size: 1.5rem; font-weight: 600; }
+  .nav-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.9rem;
+  }
+  .nav-link:hover { text-decoration: underline; }
+  #map {
+    width: 100%;
+    height: calc(100vh - 64px);
+  }
+  .weather-label {
+    background: rgba(15, 17, 23, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    text-align: center;
+    width: auto !important;
+    height: auto !important;
+  }
+  .leaflet-popup-content-wrapper {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .leaflet-popup-tip { background: var(--surface); }
+  .leaflet-popup-content { margin: 12px 16px; font-size: 0.9rem; line-height: 1.6; }
+  .popup-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+  .popup-temp { font-weight: 700; font-size: 1.2rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SF Weather Map</h1>
+  <a href="/" class="nav-link">&larr; Dashboard</a>
+</header>
+<div id="map"></div>
+
+<script>
+const NAMES = {
+  financial_district: "Financial District", chinatown: "Chinatown", union_square: "Union Square",
+  tenderloin: "Tenderloin", civic_center: "Civic Center", embarcadero: "Embarcadero",
+  rincon_hill: "Rincon Hill", south_beach: "South Beach", north_beach: "North Beach",
+  telegraph_hill: "Telegraph Hill", russian_hill: "Russian Hill", nob_hill: "Nob Hill",
+  marina: "Marina", pacific_heights: "Pacific Heights", japantown: "Japantown",
+  presidio: "Presidio", sea_cliff: "Sea Cliff", lands_end: "Lands End",
+  inner_richmond: "Inner Richmond", outer_richmond: "Outer Richmond",
+  inner_sunset: "Inner Sunset", outer_sunset: "Outer Sunset", parkside: "Parkside",
+  haight: "Haight-Ashbury", lower_haight: "Lower Haight", hayes_valley: "Hayes Valley",
+  cole_valley: "Cole Valley", castro: "Castro", noe_valley: "Noe Valley",
+  mission: "Mission District", soma: "SoMa", mission_bay: "Mission Bay",
+  twin_peaks: "Twin Peaks", diamond_heights: "Diamond Heights", glen_park: "Glen Park",
+  forest_hill: "Forest Hill", west_portal: "West Portal", st_francis_wood: "St. Francis Wood",
+  bernal_heights: "Bernal Heights", potrero_hill: "Potrero Hill", dogpatch: "Dogpatch",
+  bayview: "Bayview", hunters_point: "Hunters Point", excelsior: "Excelsior",
+  visitacion_valley: "Visitacion Valley", crocker_amazon: "Crocker Amazon",
+  ingleside: "Ingleside", oceanview: "Oceanview", merced_heights: "Merced Heights",
+  lakeside: "Lakeside", stonestown: "Stonestown"
+};
+
+const COORDS = {
+  financial_district: [37.7946, -122.3999],
+  chinatown: [37.7941, -122.4078],
+  union_square: [37.7880, -122.4075],
+  tenderloin: [37.7847, -122.4141],
+  civic_center: [37.7793, -122.4193],
+  embarcadero: [37.7936, -122.3880],
+  rincon_hill: [37.7862, -122.3906],
+  south_beach: [37.7864, -122.3886],
+  north_beach: [37.8005, -122.4082],
+  telegraph_hill: [37.8024, -122.4058],
+  russian_hill: [37.8011, -122.4197],
+  nob_hill: [37.7930, -122.4161],
+  marina: [37.8017, -122.4367],
+  pacific_heights: [37.7925, -122.4382],
+  japantown: [37.7854, -122.4294],
+  presidio: [37.7989, -122.4662],
+  sea_cliff: [37.7876, -122.4910],
+  lands_end: [37.7878, -122.5048],
+  inner_richmond: [37.7793, -122.4637],
+  outer_richmond: [37.7766, -122.4943],
+  inner_sunset: [37.7601, -122.4658],
+  outer_sunset: [37.7558, -122.4960],
+  parkside: [37.7440, -122.4870],
+  haight: [37.7692, -122.4481],
+  lower_haight: [37.7720, -122.4305],
+  hayes_valley: [37.7764, -122.4260],
+  cole_valley: [37.7658, -122.4500],
+  castro: [37.7609, -122.4350],
+  noe_valley: [37.7502, -122.4337],
+  mission: [37.7599, -122.4148],
+  soma: [37.7785, -122.3950],
+  mission_bay: [37.7706, -122.3930],
+  twin_peaks: [37.7544, -122.4477],
+  diamond_heights: [37.7434, -122.4438],
+  glen_park: [37.7350, -122.4332],
+  forest_hill: [37.7478, -122.4596],
+  west_portal: [37.7406, -122.4658],
+  st_francis_wood: [37.7345, -122.4622],
+  bernal_heights: [37.7390, -122.4153],
+  potrero_hill: [37.7562, -122.3927],
+  dogpatch: [37.7614, -122.3878],
+  bayview: [37.7295, -122.3905],
+  hunters_point: [37.7247, -122.3786],
+  excelsior: [37.7253, -122.4250],
+  visitacion_valley: [37.7147, -122.4052],
+  crocker_amazon: [37.7100, -122.4343],
+  ingleside: [37.7235, -122.4476],
+  oceanview: [37.7179, -122.4569],
+  merced_heights: [37.7170, -122.4470],
+  lakeside: [37.7271, -122.4780],
+  stonestown: [37.7285, -122.4750]
+};
+
+function tempColor(f) {
+  if (f >= 75) return '#ef4444';
+  if (f >= 68) return '#f59e0b';
+  if (f >= 60) return '#22c55e';
+  if (f >= 52) return '#06b6d4';
+  return '#3b82f6';
+}
+
+const map = L.map('map', {
+  center: [37.76, -122.45],
+  zoom: 13,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19
+}).addTo(map);
+
+const labelLayer = L.layerGroup().addTo(map);
+
+function layoutLabels(data) {
+  labelLayer.clearLayers();
+
+  // Place small dot at each actual coordinate
+  const items = [];
+  data.forEach(r => {
+    const coords = COORDS[r.neighborhood];
+    if (!coords) return;
+    const color = tempColor(r.temp_f);
+    L.circleMarker(coords, {
+      radius: 4, fillColor: color, color: color,
+      weight: 1, opacity: 1, fillOpacity: 0.9
+    }).addTo(labelLayer);
+    const pt = map.latLngToContainerPoint(coords);
+    items.push({ r, color, origX: pt.x, origY: pt.y, x: pt.x, y: pt.y, w: 0, h: 0 });
+  });
+
+  // Measure label sizes using a hidden element
+  const measure = document.createElement('div');
+  measure.style.cssText = 'position:absolute;visibility:hidden;font:0.75rem -apple-system,BlinkMacSystemFont,sans-serif;line-height:1.4;white-space:nowrap;padding:4px 8px;';
+  document.body.appendChild(measure);
+  items.forEach(item => {
+    const name = NAMES[item.r.neighborhood] || item.r.neighborhood;
+    measure.innerHTML = `<strong>${name}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%`;
+    item.w = measure.offsetWidth + 2;
+    item.h = measure.offsetHeight + 2;
+  });
+  document.body.removeChild(measure);
+
+  // Force-directed iteration to remove overlaps
+  const pad = 4;
+  for (let iter = 0; iter < 80; iter++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const overlapX = (a.w + b.w) / 2 + pad - Math.abs(a.x - b.x);
+        const overlapY = (a.h + b.h) / 2 + pad - Math.abs(a.y - b.y);
+        if (overlapX > 0 && overlapY > 0) {
+          // Push apart along the axis with less overlap
+          if (overlapX < overlapY) {
+            const push = overlapX / 2 + 0.5;
+            if (a.x <= b.x) { a.x -= push; b.x += push; }
+            else { a.x += push; b.x -= push; }
+          } else {
+            const push = overlapY / 2 + 0.5;
+            if (a.y <= b.y) { a.y -= push; b.y += push; }
+            else { a.y += push; b.y -= push; }
+          }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  // Render labels and pointer lines
+  items.forEach(item => {
+    const labelLatLng = map.containerPointToLatLng(L.point(item.x, item.y));
+    const origLatLng = [item.r.neighborhood].map(() => COORDS[item.r.neighborhood])[0];
+    const name = NAMES[item.r.neighborhood] || item.r.neighborhood;
+    const color = item.color;
+
+    // Pointer line from label to dot
+    const dist = Math.hypot(item.x - item.origX, item.y - item.origY);
+    if (dist > 8) {
+      L.polyline([labelLatLng, origLatLng], {
+        color: '#555', weight: 1, opacity: 0.6, dashArray: '3,3'
+      }).addTo(labelLayer);
+    }
+
+    // Label
+    L.marker(labelLatLng, {
+      icon: L.divIcon({
+        className: 'weather-label',
+        html: `<div style="color:${color}"><strong>${name}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%</div>`,
+        iconSize: [item.w, item.h],
+        iconAnchor: [item.w / 2, item.h / 2]
+      }),
+      interactive: false
+    }).addTo(labelLayer);
+  });
+}
+
+let weatherData = [];
+fetch('/api/latest')
+  .then(r => r.json())
+  .then(data => {
+    weatherData = data;
+    layoutLabels(data);
+  });
+
+map.on('zoomend moveend', () => {
+  if (weatherData.length) layoutLabels(weatherData);
+});
+</script>
+</body>
+</html>

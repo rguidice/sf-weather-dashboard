@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SF Microclimate Weather</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #3b82f6;
+    --warm: #ef4444;
+    --cool: #06b6d4;
+    --green: #22c55e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
+
+  /* Header */
+  header { margin-bottom: 32px; }
+  header h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 4px; }
+  .meta { color: var(--muted); font-size: 0.85rem; display: flex; gap: 16px; flex-wrap: wrap; }
+  .meta .dot { color: var(--green); }
+
+  /* Cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card h2 { font-size: 0.9rem; color: var(--muted); font-weight: 500; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat { font-size: 2rem; font-weight: 700; }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .table-header h2 { font-size: 0.9rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 10px 20px; font-size: 0.75rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 20px; font-size: 0.9rem; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover { background: rgba(59, 130, 246, 0.05); }
+  .temp-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sensor-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent);
+  }
+  .sortable { cursor: pointer; user-select: none; }
+  .sortable:hover { color: var(--text); }
+  .sortable.active { color: var(--accent); }
+  .sort-arrow { font-size: 0.7rem; }
+  .corrected { color: #f59e0b; font-size: 0.75rem; margin-left: 4px; cursor: help; }
+  .legend { padding: 8px 20px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+  .legend span { color: #f59e0b; }
+  .clickable { cursor: pointer; }
+
+  /* Not reporting */
+  .not-reporting {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+  .not-reporting h2 { font-size: 0.9rem; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .nr-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .nr-chip {
+    padding: 4px 12px;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    background: rgba(113, 113, 122, 0.15);
+    color: var(--muted);
+  }
+
+  /* Chart section */
+  .chart-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .chart-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .chart-controls label { font-size: 0.85rem; color: var(--muted); }
+  select, .btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  select:focus, .btn:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .btn.active { background: var(--accent); border-color: var(--accent); }
+  .chart-wrap { position: relative; height: 300px; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 40px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>SF Microclimate Weather</h1>
+    <div style="margin-bottom:8px"><a href="/map" style="color:var(--accent);text-decoration:none;font-size:0.9rem">View Map &rarr;</a></div>
+    <div class="meta">
+      <span><span class="dot">&#9679;</span> Last scraped: <span id="updated-time">--</span></span>
+      <span>Scraping every 4 hours</span>
+      <span>API data from: <span id="api-time">--</span></span>
+      <span id="scrape-count"></span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>City Average</h2>
+      <div class="stat" id="city-avg-temp">--</div>
+      <div style="color:var(--muted);font-size:0.85rem" id="city-avg-humidity">--</div>
+    </div>
+    <div class="card">
+      <h2>Temperature Range</h2>
+      <div class="stat" id="temp-range">--</div>
+      <div style="color:var(--muted);font-size:0.85rem" id="range-detail">--</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header"><h2>Current Conditions</h2></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th class="sortable" data-key="neighborhood">Neighborhood <span class="sort-arrow"></span></th>
+          <th class="sortable active" data-key="temp_f">Temp <span class="sort-arrow">&darr;</span></th>
+          <th class="sortable" data-key="humidity">Humidity <span class="sort-arrow"></span></th>
+          <th class="sortable" data-key="sensor_count">Sensors <span class="sort-arrow"></span></th>
+        </tr></thead>
+        <tbody id="readings-body"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="legend"><span>*</span> Temperature was outlier-corrected by the API (original sensor reading replaced with neighbor/city average)</div>
+  </div>
+
+  <div class="not-reporting" id="not-reporting" style="display:none">
+    <h2>Not Reporting (0 sensors)</h2>
+    <div class="nr-list" id="nr-list"></div>
+  </div>
+
+  <div class="chart-section">
+    <div class="chart-controls">
+      <label>Neighborhood:</label>
+      <select id="chart-hood"></select>
+      <label>Period:</label>
+      <button class="btn active" data-days="7">7d</button>
+      <button class="btn" data-days="14">14d</button>
+      <button class="btn" data-days="30">30d</button>
+    </div>
+    <div class="chart-wrap"><canvas id="history-chart"></canvas></div>
+  </div>
+</div>
+
+<script>
+const NAMES = {
+  financial_district: "Financial District", chinatown: "Chinatown", union_square: "Union Square",
+  tenderloin: "Tenderloin", civic_center: "Civic Center", embarcadero: "Embarcadero",
+  rincon_hill: "Rincon Hill", south_beach: "South Beach", north_beach: "North Beach",
+  telegraph_hill: "Telegraph Hill", russian_hill: "Russian Hill", nob_hill: "Nob Hill",
+  marina: "Marina", pacific_heights: "Pacific Heights", japantown: "Japantown",
+  presidio: "Presidio", sea_cliff: "Sea Cliff", lands_end: "Lands End",
+  inner_richmond: "Inner Richmond", outer_richmond: "Outer Richmond",
+  inner_sunset: "Inner Sunset", outer_sunset: "Outer Sunset", parkside: "Parkside",
+  haight: "Haight-Ashbury", lower_haight: "Lower Haight", hayes_valley: "Hayes Valley",
+  cole_valley: "Cole Valley", castro: "Castro", noe_valley: "Noe Valley",
+  mission: "Mission District", soma: "SoMa", mission_bay: "Mission Bay",
+  twin_peaks: "Twin Peaks", diamond_heights: "Diamond Heights", glen_park: "Glen Park",
+  forest_hill: "Forest Hill", west_portal: "West Portal", st_francis_wood: "St. Francis Wood",
+  bernal_heights: "Bernal Heights", potrero_hill: "Potrero Hill", dogpatch: "Dogpatch",
+  bayview: "Bayview", hunters_point: "Hunters Point", excelsior: "Excelsior",
+  visitacion_valley: "Visitacion Valley", crocker_amazon: "Crocker Amazon",
+  ingleside: "Ingleside", oceanview: "Oceanview", merced_heights: "Merced Heights",
+  lakeside: "Lakeside", stonestown: "Stonestown"
+};
+
+function name(key) { return NAMES[key] || key; }
+
+function tempColor(f) {
+  if (f >= 75) return '#ef4444';
+  if (f >= 68) return '#f59e0b';
+  if (f >= 60) return '#22c55e';
+  if (f >= 52) return '#06b6d4';
+  return '#3b82f6';
+}
+
+function relTime(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (diff < 1) return 'just now';
+  if (diff < 60) return Math.round(diff) + 'm ago';
+  if (diff < 1440) return Math.round(diff / 60) + 'h ago';
+  return Math.round(diff / 1440) + 'd ago';
+}
+
+let chart = null;
+let selectedDays = 7;
+let activeNeighborhoods = [];
+let latestData = [];
+let sortKey = 'temp_f';
+let sortAsc = false;
+
+async function loadLatest() {
+  const [latest, status] = await Promise.all([
+    fetch('/api/latest').then(r => r.json()),
+    fetch('/api/status').then(r => r.json())
+  ]);
+
+  if (status.last_scrape) {
+    document.getElementById('updated-time').textContent = status.last_scrape.created_at_pacific || relTime(status.last_scrape.created_at);
+    document.getElementById('api-time').textContent = relTime(status.last_scrape.scraped_at);
+    document.getElementById('scrape-count').textContent = status.total_scrapes + ' total scrapes';
+  }
+
+  if (!latest.length) {
+    document.getElementById('readings-body').innerHTML = '<tr><td colspan="4" class="loading">No data yet. Run scrape.py first.</td></tr>';
+    return;
+  }
+
+  // Summary stats
+  const temps = latest.map(r => r.temp_f);
+  const humids = latest.map(r => r.humidity);
+  const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+  document.getElementById('city-avg-temp').textContent = Math.round(avg(temps)) + '\u00B0F';
+  document.getElementById('city-avg-humidity').textContent = Math.round(avg(humids)) + '% humidity';
+  const minT = Math.min(...temps), maxT = Math.max(...temps);
+  document.getElementById('temp-range').textContent = (maxT - minT) + '\u00B0F spread';
+  document.getElementById('range-detail').textContent = minT + '\u00B0F \u2013 ' + maxT + '\u00B0F';
+
+  latestData = latest;
+  renderTable();
+
+  activeNeighborhoods = latest.map(r => r.neighborhood).sort();
+
+  // Not reporting
+  const notReporting = Object.keys(NAMES).filter(k => !activeNeighborhoods.includes(k));
+  if (notReporting.length) {
+    document.getElementById('not-reporting').style.display = '';
+    document.querySelector('#not-reporting h2').textContent = `Not Reporting (${notReporting.length} neighborhoods)`;
+    document.getElementById('nr-list').innerHTML = notReporting.map(k => `<span class="nr-chip">${name(k)}</span>`).join('');
+  }
+
+  // Populate select
+  const sel = document.getElementById('chart-hood');
+  sel.innerHTML = activeNeighborhoods.map(k => `<option value="${k}">${name(k)}</option>`).join('');
+  loadHistory(activeNeighborhoods[0], selectedDays);
+}
+
+async function loadHistory(neighborhood, days) {
+  const data = await fetch(`/api/history?neighborhood=${neighborhood}&days=${days}`).then(r => r.json());
+
+  const labels = data.map(r => {
+    const d = new Date(r.scraped_at);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
+  });
+
+  const config = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Temp (\u00B0F)',
+          data: data.map(r => r.temp_f),
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.1)',
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Humidity (%)',
+          data: data.map(r => r.humidity),
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,0.1)',
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#71717a' } },
+        tooltip: { backgroundColor: '#1a1d27', borderColor: '#2a2d3a', borderWidth: 1 }
+      },
+      scales: {
+        x: { ticks: { color: '#71717a', maxRotation: 45, maxTicksLimit: 12 }, grid: { color: '#2a2d3a' } },
+        y: { position: 'left', ticks: { color: '#ef4444' }, grid: { color: '#2a2d3a' }, title: { display: true, text: 'Temp (\u00B0F)', color: '#ef4444' } },
+        y1: { position: 'right', ticks: { color: '#3b82f6' }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Humidity (%)', color: '#3b82f6' }, min: 0, max: 100 }
+      }
+    }
+  };
+
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('history-chart'), config);
+}
+
+function renderTable() {
+  const sorted = [...latestData].sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (sortKey === 'neighborhood') { av = name(av); bv = name(bv); }
+    if (av < bv) return sortAsc ? -1 : 1;
+    if (av > bv) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
+  const tbody = document.getElementById('readings-body');
+  tbody.innerHTML = sorted.map(r => `
+    <tr class="clickable" data-hood="${r.neighborhood}">
+      <td>${name(r.neighborhood)}</td>
+      <td class="temp-cell" style="color:${tempColor(r.temp_f)}">${r.temp_f}\u00B0F${r.outlier_corrected ? '<span class="corrected" title="Outlier corrected — original sensor reading was replaced with neighbor/city average">*</span>' : ''}</td>
+      <td>${r.humidity}%</td>
+      <td><span class="sensor-badge">${r.sensor_count}</span></td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('tr').forEach(tr => {
+    tr.addEventListener('click', () => {
+      document.getElementById('chart-hood').value = tr.dataset.hood;
+      loadHistory(tr.dataset.hood, selectedDays);
+      document.querySelector('.chart-section').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+
+  document.querySelectorAll('.sortable').forEach(th => {
+    const arrow = th.querySelector('.sort-arrow');
+    if (th.dataset.key === sortKey) {
+      th.classList.add('active');
+      arrow.innerHTML = sortAsc ? '&uarr;' : '&darr;';
+    } else {
+      th.classList.remove('active');
+      arrow.innerHTML = '';
+    }
+  });
+}
+
+document.querySelectorAll('.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key) { sortAsc = !sortAsc; }
+    else { sortKey = key; sortAsc = key === 'neighborhood'; }
+    renderTable();
+  });
+});
+
+// Event listeners
+document.getElementById('chart-hood').addEventListener('change', e => loadHistory(e.target.value, selectedDays));
+document.querySelectorAll('[data-days]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-days]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedDays = parseInt(btn.dataset.days);
+    loadHistory(document.getElementById('chart-hood').value, selectedDays);
+  });
+});
+
+loadLatest();
+</script>
+</body>
+</html>
