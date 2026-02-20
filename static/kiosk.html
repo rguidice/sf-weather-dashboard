@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SF Weather — Kiosk</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #3b82f6;
+    --warm: #ef4444;
+    --cool: #06b6d4;
+    --green: #22c55e;
+    --sidebar-width: 270px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: row;
+  }
+  #map {
+    flex: 1;
+    height: 100vh;
+    min-width: 0;
+  }
+  #sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    gap: 12px;
+    background: var(--bg);
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .card h2 {
+    font-size: 1.4rem;
+    color: var(--text);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  .stat {
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-secondary {
+    font-size: 2.2rem;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sub {
+    font-size: 1.1rem;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .sub strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  #fav-label {
+    font-size: 1.4rem;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  #updated-rel {
+    font-size: 3.2rem;
+    white-space: nowrap;
+  }
+  #city-spread {
+    font-size: 2.6rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  #watermark {
+    font-size: 2rem;
+    color: var(--muted);
+    text-align: center;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  #city-range {
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Map labels */
+  .weather-label {
+    background: rgba(15, 17, 23, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    text-align: center;
+    width: auto !important;
+    height: auto !important;
+  }
+  .leaflet-popup-content-wrapper {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .leaflet-popup-tip { background: var(--surface); }
+  .leaflet-popup-content { margin: 12px 16px; font-size: 0.9rem; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="sidebar">
+  <div class="card">
+    <h2 id="fav-label">Your Neighborhood</h2>
+    <div class="stat" id="fav-temp">—</div>
+    <div class="stat-secondary" id="fav-humidity">—</div>
+    <div class="sub" id="fav-name">—</div>
+  </div>
+  <div class="card">
+    <h2>SF Today</h2>
+    <div id="city-spread">—</div>
+    <div id="city-range">—</div>
+  </div>
+  <div class="card">
+    <h2>Last Updated</h2>
+    <div class="stat" id="updated-rel">—</div>
+    <div class="sub" id="updated-abs">—</div>
+  </div>
+  <div id="watermark">weather.local</div>
+</div>
+
+<script>
+const NAMES = {
+  financial_district: "Financial District", chinatown: "Chinatown", union_square: "Union Square",
+  tenderloin: "Tenderloin", civic_center: "Civic Center", embarcadero: "Embarcadero",
+  rincon_hill: "Rincon Hill", south_beach: "South Beach", north_beach: "North Beach",
+  telegraph_hill: "Telegraph Hill", russian_hill: "Russian Hill", nob_hill: "Nob Hill",
+  marina: "Marina", pacific_heights: "Pacific Heights", japantown: "Japantown",
+  presidio: "Presidio", sea_cliff: "Sea Cliff", lands_end: "Lands End",
+  inner_richmond: "Inner Richmond", outer_richmond: "Outer Richmond",
+  inner_sunset: "Inner Sunset", outer_sunset: "Outer Sunset", parkside: "Parkside",
+  haight: "Haight-Ashbury", lower_haight: "Lower Haight", hayes_valley: "Hayes Valley",
+  cole_valley: "Cole Valley", castro: "Castro", noe_valley: "Noe Valley",
+  mission: "Mission District", soma: "SoMa", mission_bay: "Mission Bay",
+  twin_peaks: "Twin Peaks", diamond_heights: "Diamond Heights", glen_park: "Glen Park",
+  forest_hill: "Forest Hill", west_portal: "West Portal", st_francis_wood: "St. Francis Wood",
+  bernal_heights: "Bernal Heights", potrero_hill: "Potrero Hill", dogpatch: "Dogpatch",
+  bayview: "Bayview", hunters_point: "Hunters Point", excelsior: "Excelsior",
+  visitacion_valley: "Visitacion Valley", crocker_amazon: "Crocker Amazon",
+  ingleside: "Ingleside", oceanview: "Oceanview", merced_heights: "Merced Heights",
+  lakeside: "Lakeside", stonestown: "Stonestown"
+};
+
+const COORDS = {
+  financial_district: [37.7946, -122.3999], chinatown: [37.7941, -122.4078],
+  union_square: [37.7880, -122.4075], tenderloin: [37.7847, -122.4141],
+  civic_center: [37.7793, -122.4193], embarcadero: [37.7936, -122.3880],
+  rincon_hill: [37.7862, -122.3906], south_beach: [37.7864, -122.3886],
+  north_beach: [37.8005, -122.4082], telegraph_hill: [37.8024, -122.4058],
+  russian_hill: [37.8011, -122.4197], nob_hill: [37.7930, -122.4161],
+  marina: [37.8017, -122.4367], pacific_heights: [37.7925, -122.4382],
+  japantown: [37.7854, -122.4294], presidio: [37.7989, -122.4662],
+  sea_cliff: [37.7876, -122.4910], lands_end: [37.7878, -122.5048],
+  inner_richmond: [37.7793, -122.4637], outer_richmond: [37.7766, -122.4943],
+  inner_sunset: [37.7601, -122.4658], outer_sunset: [37.7558, -122.4960],
+  parkside: [37.7440, -122.4870], haight: [37.7692, -122.4481],
+  lower_haight: [37.7720, -122.4305], hayes_valley: [37.7764, -122.4260],
+  cole_valley: [37.7658, -122.4500], castro: [37.7609, -122.4350],
+  noe_valley: [37.7502, -122.4337], mission: [37.7599, -122.4148],
+  soma: [37.7785, -122.3950], mission_bay: [37.7706, -122.3930],
+  twin_peaks: [37.7544, -122.4477], diamond_heights: [37.7434, -122.4438],
+  glen_park: [37.7350, -122.4332], forest_hill: [37.7478, -122.4596],
+  west_portal: [37.7406, -122.4658], st_francis_wood: [37.7345, -122.4622],
+  bernal_heights: [37.7390, -122.4153], potrero_hill: [37.7562, -122.3927],
+  dogpatch: [37.7614, -122.3878], bayview: [37.7295, -122.3905],
+  hunters_point: [37.7247, -122.3786], excelsior: [37.7253, -122.4250],
+  visitacion_valley: [37.7147, -122.4052], crocker_amazon: [37.7100, -122.4343],
+  ingleside: [37.7235, -122.4476], oceanview: [37.7179, -122.4569],
+  merced_heights: [37.7170, -122.4470], lakeside: [37.7271, -122.4780],
+  stonestown: [37.7285, -122.4750]
+};
+
+function tempColor(f) {
+  if (f >= 75) return '#ef4444';
+  if (f >= 68) return '#f59e0b';
+  if (f >= 60) return '#22c55e';
+  if (f >= 52) return '#06b6d4';
+  return '#3b82f6';
+}
+
+const map = L.map('map', { center: [37.760, -122.440], zoom: 12.60, zoomSnap: 0, zoomControl: false, attributionControl: false });
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19
+}).addTo(map);
+
+const labelLayer = L.layerGroup().addTo(map);
+
+function layoutLabels(data) {
+  labelLayer.clearLayers();
+  const items = [];
+  data.forEach(r => {
+    const coords = COORDS[r.neighborhood];
+    if (!coords) return;
+    const color = tempColor(r.temp_f);
+    L.circleMarker(coords, {
+      radius: 4, fillColor: color, color: color,
+      weight: 1, opacity: 1, fillOpacity: 0.9
+    }).addTo(labelLayer);
+    const pt = map.latLngToContainerPoint(coords);
+    items.push({ r, color, origX: pt.x, origY: pt.y, x: pt.x, y: pt.y, w: 0, h: 0 });
+  });
+
+  const measure = document.createElement('div');
+  measure.style.cssText = 'position:absolute;visibility:hidden;font:0.75rem -apple-system,BlinkMacSystemFont,sans-serif;line-height:1.4;white-space:nowrap;padding:4px 8px;';
+  document.body.appendChild(measure);
+  items.forEach(item => {
+    const n = NAMES[item.r.neighborhood] || item.r.neighborhood;
+    measure.innerHTML = `<strong>${n}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%`;
+    item.w = measure.offsetWidth + 2;
+    item.h = measure.offsetHeight + 2;
+  });
+  document.body.removeChild(measure);
+
+  const pad = 4;
+  for (let iter = 0; iter < 80; iter++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const overlapX = (a.w + b.w) / 2 + pad - Math.abs(a.x - b.x);
+        const overlapY = (a.h + b.h) / 2 + pad - Math.abs(a.y - b.y);
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX < overlapY) {
+            const push = overlapX / 2 + 0.5;
+            if (a.x <= b.x) { a.x -= push; b.x += push; } else { a.x += push; b.x -= push; }
+          } else {
+            const push = overlapY / 2 + 0.5;
+            if (a.y <= b.y) { a.y -= push; b.y += push; } else { a.y += push; b.y -= push; }
+          }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  items.forEach(item => {
+    const labelLatLng = map.containerPointToLatLng(L.point(item.x, item.y));
+    const origLatLng = COORDS[item.r.neighborhood];
+    const n = NAMES[item.r.neighborhood] || item.r.neighborhood;
+    const dist = Math.hypot(item.x - item.origX, item.y - item.origY);
+    if (dist > 8) {
+      L.polyline([labelLatLng, origLatLng], {
+        color: '#555', weight: 1, opacity: 0.6, dashArray: '3,3'
+      }).addTo(labelLayer);
+    }
+    L.marker(labelLatLng, {
+      icon: L.divIcon({
+        className: 'weather-label',
+        html: `<div style="color:${item.color}"><strong>${n}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%</div>`,
+        iconSize: [item.w, item.h],
+        iconAnchor: [item.w / 2, item.h / 2]
+      }),
+      interactive: false
+    }).addTo(labelLayer);
+  });
+}
+
+function relTime(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (diff < 1) return 'just now';
+  if (diff < 60) return Math.round(diff) + 'm ago';
+  if (diff < 1440) return Math.round(diff / 60) + 'h ago';
+  return Math.round(diff / 1440) + 'd ago';
+}
+
+map.on('zoomend moveend', () => {
+  if (weatherData.length) layoutLabels(weatherData);
+});
+
+let weatherData = [];
+(async () => {
+  const [latest, cfg, status] = await Promise.all([
+    fetch('/api/latest').then(r => r.json()),
+    fetch('/api/config').then(r => r.json()).catch(() => ({})),
+    fetch('/api/status').then(r => r.json()).catch(() => ({})),
+  ]);
+  weatherData = latest;
+
+  // Tell Leaflet the map div's real size now that the sidebar is rendered
+  map.invalidateSize();
+  layoutLabels(latest);
+
+  // Card 1: Favorite neighborhood
+  const fav = cfg.favorite_neighborhood;
+  const favData = fav ? latest.find(r => r.neighborhood === fav) : null;
+  if (favData) {
+    document.getElementById('fav-label').textContent = NAMES[fav] || fav;
+    const tempEl = document.getElementById('fav-temp');
+    tempEl.textContent = favData.temp_f + '\u00B0F';
+    tempEl.style.color = tempColor(favData.temp_f);
+    document.getElementById('fav-humidity').textContent = favData.humidity + '% humidity';
+    document.getElementById('fav-humidity').style.color = '#06b6d4';
+    document.getElementById('fav-name').textContent = favData.sensor_count + ' sensor' + (favData.sensor_count !== 1 ? 's' : '') + ' reporting';
+  } else {
+    document.getElementById('fav-label').textContent = 'Your Neighborhood';
+    document.getElementById('fav-temp').textContent = '—';
+    document.getElementById('fav-name').textContent = 'Set favorite_neighborhood';
+    document.getElementById('fav-humidity').textContent = 'in config.json';
+  }
+
+  // Card 2: City range
+  if (latest.length) {
+    const temps = latest.map(r => r.temp_f);
+    const min = Math.min(...temps), max = Math.max(...temps);
+    const spread = max - min;
+    document.getElementById('city-spread').textContent = spread + '\u00B0F spread';
+    document.getElementById('city-range').innerHTML = min + '\u00B0\u2013' + max + '\u00B0F<br><span style="font-size:1.1rem">' + latest.length + ' neighborhoods</span>';
+  }
+
+  // Card 3: Last updated
+  if (status.last_scrape) {
+    document.getElementById('updated-rel').textContent = relTime(status.last_scrape.scraped_at);
+    document.getElementById('updated-abs').textContent = status.last_scrape.created_at_pacific || '';
+  }
+
+  if (!cfg.hide_map_attribution) {
+    L.control.attribution({
+      prefix: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
+    }).addTo(map);
+  }
+})();
+
+setTimeout(() => location.reload(), 60 * 60 * 1000);
+</script>
+</body>
+</html>

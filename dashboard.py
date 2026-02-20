@@ -23,6 +23,11 @@ def map_page():
     return send_from_directory("static", "map.html")
 
 
+@app.route("/kiosk")
+def kiosk_page():
+    return send_from_directory("static", "kiosk.html")
+
+
 @app.route("/api/latest")
 def api_latest():
     conn = get_db()
@@ -78,7 +83,10 @@ def api_config():
     try:
         with open(CONFIG_PATH) as f:
             cfg = json.load(f)
-        return jsonify({"favorite_neighborhood": cfg.get("favorite_neighborhood", "")})
+        return jsonify({
+            "favorite_neighborhood": cfg.get("favorite_neighborhood", ""),
+            "hide_map_attribution": cfg.get("hide_map_attribution", False),
+        })
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return jsonify({})
 

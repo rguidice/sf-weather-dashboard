@@ -2,11 +2,11 @@
 
 **Written using Claude Code running Opus 4.6**
 
-Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates API](https://microclimates.solofounders.com/sf-weather) and serves a local dashboard. Designed to run on a Raspberry Pi on your home network.
+Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates API](https://microclimates.solofounders.com) and serves a local dashboard. Designed to run on a Raspberry Pi on your home network.
 
 ## What it does
 
-- **Scrapes** temp and humidity for ~50 SF neighborhoods every 4 hours via cron
+- **Scrapes** temp and humidity for ~50 SF neighborhoods every hour via cron
 - **Stores** readings in a local SQLite database (`sf-weather.db` in the project directory)
 - **Serves** a dark-themed dashboard accessible at `http://weather.local` with:
   - City-wide averages and temperature spread
@@ -26,12 +26,13 @@ sf-weather-dashboard/
   static/
     index.html    # Main dashboard page
     map.html      # Interactive neighborhood map (Leaflet.js)
+    kiosk.html    # Wall display: full-screen map + favorite neighborhood sidebar
   mdns_alias.py   # Publishes weather.local mDNS CNAME via Avahi D-Bus API
 ```
 
 ## How the data works
 
-The scraper runs every 4 hours via cron and inserts one row per neighborhood into the `readings` table. This is the actual weather data that powers the dashboard and charts. Over time, readings accumulate — after a day you'll have ~6 data points per neighborhood, after a week ~42, etc.
+The scraper runs every hour via cron and inserts one row per neighborhood into the `readings` table. This is the actual weather data that powers the dashboard and charts. Over time, readings accumulate — after a day you'll have ~24 data points per neighborhood, after a week ~168, etc.
 
 There's also a `scrape_log` table that records metadata about each scrape run (how many neighborhoods reported, which were skipped). This is for operational debugging, not displayed on the dashboard.
 
@@ -64,6 +65,12 @@ The value must be a valid neighborhood key (snake_case, matching the API — e.g
 `setup.sh` creates `config.json` from `config.example.json` automatically (default: `mission`). The file is gitignored since it's a per-installation preference. Edits take effect on the next page refresh (no server restart needed).
 
 To disable, set `favorite_neighborhood` to `""`, delete `config.json`, or remove the key entirely.
+
+## Kiosk display
+
+`/kiosk` is a purpose-built wall display page: a full-screen Leaflet map with a sidebar showing your favorite neighborhood's current conditions, city-wide temp range, and last-updated time. It auto-reloads every hour to pick up new scrape data. My client and hardware implementation is captured in [sf-weather-display](https://github.com/rguidice/sf-weather-display).
+
+This mode was purpose-built for my application. Please review [sf-weather-display](https://github.com/rguidice/sf-weather-display) to understand the limitations.
 
 ## Requirements
 
@@ -103,7 +110,7 @@ The script will:
 - Install `uv` if not already present
 - Create a virtualenv and install Flask
 - Initialize the SQLite database
-- Set up a **cron job** to scrape every 4 hours
+- Set up a **cron job** to scrape every hour
 - Create and start a **systemd service** (Flask on port 8080)
 - **Redirect port 80 → 8080** via iptables so no port suffix is needed in URLs (see options below)
 - Set up an **mDNS alias** so `http://weather.local` works from any device on your network (see options below)

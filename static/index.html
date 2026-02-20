@@ -134,7 +134,7 @@
     <div style="margin-bottom:8px"><a href="/map" style="color:var(--accent);text-decoration:none;font-size:0.9rem">View Map &rarr;</a></div>
     <div class="meta">
       <span><span class="dot">&#9679;</span> Last scraped: <span id="updated-time">--</span></span>
-      <span>Scraping every 4 hours</span>
+      <span>Scraping every hour</span>
       <span>API data from: <span id="api-time">--</span></span>
       <span id="scrape-count"></span>
     </div>
@@ -179,7 +179,7 @@
     <div class="nr-list" id="nr-list"></div>
   </div>
 
-  <div class="chart-section">
+  <div class="chart-section" style="margin-bottom:16px">
     <div class="chart-controls">
       <label>Neighborhood:</label>
       <select id="chart-hood"></select>
@@ -189,6 +189,9 @@
       <button class="btn" data-days="30">30d</button>
     </div>
     <div class="chart-wrap"><canvas id="history-chart"></canvas></div>
+  </div>
+  <div style="text-align:center;padding:8px 0 24px">
+    <a href="/kiosk" style="color:var(--muted);text-decoration:none;font-size:0.8rem">Kiosk display &rarr;</a>
   </div>
 </div>
 
