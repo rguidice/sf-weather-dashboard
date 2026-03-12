@@ -2,6 +2,7 @@
 """Flask dashboard for SF microclimate weather data."""
 
 import json
+import logging
 import os
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -11,6 +12,7 @@ from db import get_db, init_db
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 app = Flask(__name__, static_folder="static")
+logger = logging.getLogger(__name__)
 
 
 @app.route("/")
@@ -110,6 +112,32 @@ def api_city_summary():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/kiosk-log", methods=["POST"])
+def api_kiosk_log():
+    """Receive diagnostic logs from the kiosk client for server-side persistence."""
+    data = request.get_json(silent=True)
+    if not data or "entries" not in data:
+        return jsonify({"status": "error", "message": "missing entries"}), 400
+    for entry in data["entries"]:
+        level = entry.get("level", "info")
+        msg = entry.get("msg", "")
+        detail = entry.get("detail", "")
+        log_msg = f"[kiosk] {msg}"
+        if detail:
+            log_msg += f" | {detail}"
+        if level == "error":
+            logger.error(log_msg)
+        elif level == "warn":
+            logger.warning(log_msg)
+        else:
+            logger.info(log_msg)
+    return jsonify({"status": "ok", "received": len(data["entries"])})
+
+
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
     init_db()
     app.run(host="0.0.0.0", port=8080, debug=True)

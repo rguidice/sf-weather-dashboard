@@ -47,6 +47,7 @@ There's also a `scrape_log` table that records metadata about each scrape run (h
 | `GET /api/status` | Last scrape metadata and total scrape count |
 | `GET /api/config` | Server-side config (favorite neighborhood) |
 | `GET /api/city-summary?days=7` | Daily city-wide averages |
+| `POST /api/kiosk-log` | Receives diagnostic logs from the kiosk client (viewable via `journalctl`) |
 
 ## Configuration
 
