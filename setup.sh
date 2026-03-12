@@ -49,9 +49,15 @@ echo "==> Initializing database"
 uv run python db.py || die "Database initialization failed"
 
 # --- Cron job ---
-echo "==> Installing cron job (every 1 hour)"
 UV_PATH="$(command -v uv)"
-CRON_CMD="0 * * * * cd $PROJECT_DIR && $UV_PATH run python scrape.py >> scrape.log 2>&1"
+SCRAPE_INTERVAL=$(python3 -c "import json; print(json.load(open('$PROJECT_DIR/config.json')).get('scrape_interval_hours', 2))" 2>/dev/null || echo 2)
+if [ "$SCRAPE_INTERVAL" -eq 1 ]; then
+  CRON_SCHEDULE="0 * * * *"
+else
+  CRON_SCHEDULE="0 */$SCRAPE_INTERVAL * * *"
+fi
+echo "==> Installing cron job (every $SCRAPE_INTERVAL hour(s))"
+CRON_CMD="$CRON_SCHEDULE cd $PROJECT_DIR && $UV_PATH run python scrape.py >> scrape.log 2>&1"
 EXISTING=$(crontab -l 2>/dev/null || true)
 FILTERED=$(echo "$EXISTING" | grep -v 'scrape.py' || true)
 echo "${FILTERED:+$FILTERED

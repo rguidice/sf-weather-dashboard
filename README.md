@@ -2,11 +2,11 @@
 
 **Written using Claude Code running Opus 4.6**
 
-Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates API](https://microclimates.solofounders.com) and serves a local dashboard. Designed to run on a Raspberry Pi on your home network.
+Scrapes San Francisco neighborhood-level weather data directly from the [PurpleAir API](https://www.purpleair.com/) and serves a local dashboard. Designed to run on a Raspberry Pi on your home network.
 
 ## What it does
 
-- **Scrapes** temp and humidity for ~50 SF neighborhoods every hour via cron
+- **Scrapes** temp and humidity for ~50 SF neighborhoods every 2 hours via cron (configurable)
 - **Stores** readings in a local SQLite database (`sf-weather.db` in the project directory)
 - **Serves** a dark-themed dashboard accessible at `http://weather.local` with:
   - City-wide averages and temperature spread
@@ -19,7 +19,7 @@ Scrapes San Francisco neighborhood-level weather data from the [SF Microclimates
 ```
 sf-weather-dashboard/
   dashboard.py    # Flask app — serves the dashboard and JSON API
-  scrape.py       # Fetches data from the microclimates API and writes to SQLite
+  scrape.py       # Fetches data from PurpleAir API and writes to SQLite
   db.py           # Database schema and connection helpers
   setup.sh        # One-time Raspberry Pi setup (uv, cron, systemd)
   pyproject.toml  # Python project config (only dependency: Flask)
@@ -32,7 +32,9 @@ sf-weather-dashboard/
 
 ## How the data works
 
-The scraper runs every hour via cron and inserts one row per neighborhood into the `readings` table. This is the actual weather data that powers the dashboard and charts. Over time, readings accumulate — after a day you'll have ~24 data points per neighborhood, after a week ~168, etc.
+The scraper queries all outdoor PurpleAir sensors within San Francisco's bounding box (~235 sensors), assigns each to the nearest of 51 neighborhoods, averages the readings, and applies a -8°F temperature correction for the PurpleAir housing offset. Neighborhoods with ≤2 sensors are checked for outliers: temperature deviating >10°F or humidity deviating >20% from their 3 nearest neighbor neighborhoods is replaced with the neighbor average.
+
+Sensor locations are cached locally (`sensor_cache.json`) and refreshed every 30 days to avoid redundant API costs. Each scrape run costs ~945 API points (~340K points/month at the default 2-hour interval).
 
 There's also a `scrape_log` table that records metadata about each scrape run (how many neighborhoods reported, which were skipped). This is for operational debugging, not displayed on the dashboard.
 
@@ -46,25 +48,34 @@ There's also a `scrape_log` table that records metadata about each scrape run (h
 | `GET /api/config` | Server-side config (favorite neighborhood) |
 | `GET /api/city-summary?days=7` | Daily city-wide averages |
 
-## Favorite neighborhood
+## Configuration
 
-You can configure a "home" neighborhood that gets highlighted on the dashboard for every device on your network. Edit `config.json` in the project directory:
+Edit `config.json` in the project directory (created from `config.example.json` by `setup.sh`). The file is gitignored since it contains your API key and per-installation preferences.
 
 ```json
 {
-  "favorite_neighborhood": "mission"
+  "purpleair_api_key": "YOUR-API-KEY-HERE",
+  "favorite_neighborhood": "mission",
+  "scrape_interval_hours": 2
 }
 ```
 
-The value must be a valid neighborhood key (snake_case, matching the API — e.g. `mission`, `noe_valley`, `pacific_heights`). When set:
+| Key | Required | Description |
+|---|---|---|
+| `purpleair_api_key` | **Yes** | Your PurpleAir API read key. Get one at [develop.purpleair.com](https://develop.purpleair.com) |
+| `favorite_neighborhood` | No | Snake_case neighborhood key (e.g. `noe_valley`). Highlights a row in the table and adds a card at the top of the dashboard |
+| `scrape_interval_hours` | No | Hours between scrapes (default: `2`). `setup.sh` uses this to generate the cron schedule |
+| `hide_map_attribution` | No | `true` hides OSM/CARTO map attribution on kiosk (default: `false`) |
+
+### Favorite neighborhood
+
+When `favorite_neighborhood` is set:
 
 - A **"My Neighborhood" card** appears at the top of the dashboard showing current temp, humidity, and sensor count
 - The neighborhood row is **highlighted** in the table with a blue accent border
 - The **history chart** defaults to the favorite neighborhood
 
-`setup.sh` creates `config.json` from `config.example.json` automatically (default: `mission`). The file is gitignored since it's a per-installation preference. Edits take effect on the next page refresh (no server restart needed).
-
-To disable, set `favorite_neighborhood` to `""`, delete `config.json`, or remove the key entirely.
+To disable, set it to `""`, delete `config.json`, or remove the key entirely. Edits take effect on the next page refresh (no server restart needed).
 
 ## Kiosk display
 
@@ -76,15 +87,16 @@ This mode was purpose-built for my application. Please review [sf-weather-displa
 
 - Python 3.10+
 - [uv](https://github.com/astral-sh/uv) (installed automatically by `setup.sh`)
-- No external API keys needed
+- A [PurpleAir API](https://develop.purpleair.com) read key
 
 ## Local development
 
 ```bash
 uv sync
-uv run python db.py         # initialize the database
-uv run python scrape.py     # run one scrape
-uv run python dashboard.py  # start dashboard at http://localhost:8080
+cp config.example.json config.json   # then add your purpleair_api_key
+uv run python db.py                  # initialize the database
+uv run python scrape.py              # run one scrape
+uv run python dashboard.py           # start dashboard at http://localhost:8080
 ```
 
 ## Deploy to Raspberry Pi
@@ -93,6 +105,7 @@ uv run python dashboard.py  # start dashboard at http://localhost:8080
 
 - A Raspberry Pi on your local network with SSH access
 - An SSH config entry (e.g. `Host pi`) or know the Pi's IP address
+- A PurpleAir API read key (add to `config.json` after setup creates it)
 
 ### First-time setup
 
@@ -106,11 +119,13 @@ cd ~/sf-weather-dashboard
 
 The setup script requires sudo for the systemd steps and will prompt for your password. Do **not** run it as `sudo ./setup.sh` — that changes `$HOME` and breaks all the paths.
 
+**Important:** After `setup.sh` creates `config.json`, add your `purpleair_api_key` before the first scrape will succeed.
+
 The script will:
 - Install `uv` if not already present
 - Create a virtualenv and install Flask
 - Initialize the SQLite database
-- Set up a **cron job** to scrape every hour
+- Set up a **cron job** to scrape at the configured interval (default: every 2 hours)
 - Create and start a **systemd service** (Flask on port 8080)
 - **Redirect port 80 → 8080** via iptables so no port suffix is needed in URLs (see options below)
 - Set up an **mDNS alias** so `http://weather.local` works from any device on your network (see options below)

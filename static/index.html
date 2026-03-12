@@ -136,7 +136,7 @@
     <div style="margin-bottom:8px"><a href="/map" style="color:var(--accent);text-decoration:none;font-size:0.9rem">View Map &rarr;</a></div>
     <div class="meta">
       <span><span class="dot">&#9679;</span> Last scraped: <span id="updated-time">--</span></span>
-      <span>Scraping every hour</span>
+      <span id="scrape-interval">Scraping every 2 hours</span>
       <span>API data from: <span id="api-time">--</span></span>
       <span id="scrape-count"></span>
     </div>
@@ -254,6 +254,10 @@ async function loadLatest() {
 
   favoriteNeighborhood = cfg.favorite_neighborhood || null;
 
+  const interval = cfg.scrape_interval_hours || 2;
+  document.getElementById('scrape-interval').textContent =
+    interval === 1 ? 'Scraping every hour' : `Scraping every ${interval} hours`;
+
   if (status.last_scrape) {
     document.getElementById('updated-time').textContent = status.last_scrape.created_at_pacific || relTime(status.last_scrape.created_at);
     document.getElementById('api-time').textContent = relTime(status.last_scrape.scraped_at);
@@ -282,8 +286,8 @@ async function loadLatest() {
     document.querySelector('.grid').classList.add('has-fav');
     document.getElementById('fav-card-title').textContent = name(favoriteNeighborhood);
     document.getElementById('fav-temp').style.color = tempColor(favData.temp_f);
-    document.getElementById('fav-temp').textContent = favData.temp_f + '\u00B0F';
-    document.getElementById('fav-detail').textContent = favData.humidity + '% humidity \u00B7 ' + favData.sensor_count + ' sensors';
+    document.getElementById('fav-temp').textContent = Math.round(favData.temp_f) + '\u00B0F';
+    document.getElementById('fav-detail').textContent = Math.round(favData.humidity) + '% humidity \u00B7 ' + favData.sensor_count + ' sensors';
   }
 
   latestData = latest;
@@ -376,8 +380,8 @@ function renderTable() {
     const pinned = favoriteNeighborhood && r.neighborhood === favoriteNeighborhood;
     return `<tr class="clickable${pinned ? ' pinned-row' : ''}" data-hood="${r.neighborhood}">
       <td>${name(r.neighborhood)}</td>
-      <td class="temp-cell" style="color:${tempColor(r.temp_f)}">${r.temp_f}\u00B0F${r.outlier_corrected ? '<span class="corrected" title="Outlier corrected — original sensor reading was replaced with neighbor/city average">*</span>' : ''}</td>
-      <td>${r.humidity}%</td>
+      <td class="temp-cell" style="color:${tempColor(r.temp_f)}">${Math.round(r.temp_f)}\u00B0F${r.outlier_corrected ? '<span class="corrected" title="Outlier corrected — original sensor reading was replaced with neighbor/city average">*</span>' : ''}</td>
+      <td>${Math.round(r.humidity)}%</td>
       <td><span class="sensor-badge">${r.sensor_count}</span></td>
     </tr>`;
   }).join('');

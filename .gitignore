@@ -19,6 +19,7 @@ wheels/
 
 # User config
 config.json
+sensor_cache.json
 
 # IDE / tools
 .claude/

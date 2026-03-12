@@ -1,3 +1,5 @@
 {
-  "favorite_neighborhood": "mission"
+  "favorite_neighborhood": "mission",
+  "purpleair_api_key": "",
+  "scrape_interval_hours": 2
 }

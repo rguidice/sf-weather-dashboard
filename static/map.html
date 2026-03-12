@@ -191,7 +191,7 @@ function layoutLabels(data) {
   document.body.appendChild(measure);
   items.forEach(item => {
     const name = NAMES[item.r.neighborhood] || item.r.neighborhood;
-    measure.innerHTML = `<strong>${name}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%`;
+    measure.innerHTML = `<strong>${name}</strong><br>${Math.round(item.r.temp_f)}&deg;F &middot; ${Math.round(item.r.humidity)}%`;
     item.w = measure.offsetWidth + 2;
     item.h = measure.offsetHeight + 2;
   });
@@ -243,7 +243,7 @@ function layoutLabels(data) {
     L.marker(labelLatLng, {
       icon: L.divIcon({
         className: 'weather-label',
-        html: `<div style="color:${color}"><strong>${name}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%</div>`,
+        html: `<div style="color:${color}"><strong>${name}</strong><br>${Math.round(item.r.temp_f)}&deg;F &middot; ${Math.round(item.r.humidity)}%</div>`,
         iconSize: [item.w, item.h],
         iconAnchor: [item.w / 2, item.h / 2]
       }),

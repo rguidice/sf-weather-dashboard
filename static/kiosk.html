@@ -251,7 +251,7 @@ function layoutLabels(data) {
   document.body.appendChild(measure);
   items.forEach(item => {
     const n = NAMES[item.r.neighborhood] || item.r.neighborhood;
-    measure.innerHTML = `<strong>${n}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%`;
+    measure.innerHTML = `<strong>${n}</strong><br>${Math.round(item.r.temp_f)}&deg;F &middot; ${Math.round(item.r.humidity)}%`;
     item.w = measure.offsetWidth + 2;
     item.h = measure.offsetHeight + 2;
   });
@@ -293,7 +293,7 @@ function layoutLabels(data) {
     L.marker(labelLatLng, {
       icon: L.divIcon({
         className: 'weather-label',
-        html: `<div style="color:${item.color}"><strong>${n}</strong><br>${item.r.temp_f}&deg;F &middot; ${item.r.humidity}%</div>`,
+        html: `<div style="color:${item.color}"><strong>${n}</strong><br>${Math.round(item.r.temp_f)}&deg;F &middot; ${Math.round(item.r.humidity)}%</div>`,
         iconSize: [item.w, item.h],
         iconAnchor: [item.w / 2, item.h / 2]
       }),
@@ -333,9 +333,9 @@ let weatherData = [];
   if (favData) {
     document.getElementById('fav-label').textContent = NAMES[fav] || fav;
     const tempEl = document.getElementById('fav-temp');
-    tempEl.textContent = favData.temp_f + '\u00B0F';
+    tempEl.textContent = Math.round(favData.temp_f) + '\u00B0F';
     tempEl.style.color = tempColor(favData.temp_f);
-    document.getElementById('fav-humidity').textContent = favData.humidity + '% humidity';
+    document.getElementById('fav-humidity').textContent = Math.round(favData.humidity) + '% humidity';
     document.getElementById('fav-humidity').style.color = '#06b6d4';
     document.getElementById('fav-name').textContent = favData.sensor_count + ' sensor' + (favData.sensor_count !== 1 ? 's' : '') + ' reporting';
   } else {
@@ -349,9 +349,9 @@ let weatherData = [];
   if (latest.length) {
     const temps = latest.map(r => r.temp_f);
     const min = Math.min(...temps), max = Math.max(...temps);
-    const spread = max - min;
+    const spread = Math.round(max - min);
     document.getElementById('city-spread').textContent = spread + '\u00B0F spread';
-    document.getElementById('city-range').innerHTML = min + '\u00B0\u2013' + max + '\u00B0F<br><span style="font-size:1.1rem">' + latest.length + ' neighborhoods</span>';
+    document.getElementById('city-range').innerHTML = Math.round(min) + '\u00B0\u2013' + Math.round(max) + '\u00B0F<br><span style="font-size:1.1rem">' + latest.length + ' neighborhoods</span>';
   }
 
   // Card 3: Last updated

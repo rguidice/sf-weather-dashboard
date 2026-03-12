@@ -86,6 +86,7 @@ def api_config():
         return jsonify({
             "favorite_neighborhood": cfg.get("favorite_neighborhood", ""),
             "hide_map_attribution": cfg.get("hide_map_attribution", False),
+            "scrape_interval_hours": cfg.get("scrape_interval_hours", 2),
         })
     except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return jsonify({})
