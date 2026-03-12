@@ -93,8 +93,17 @@
     letter-spacing: 0.02em;
   }
   #updated-rel {
-    font-size: 3.2rem;
+    font-size: 1.6rem;
+    color: var(--muted);
     white-space: nowrap;
+  }
+  #clock {
+    font-size: 3rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    margin-bottom: 8px;
   }
   #city-spread {
     font-size: 2.6rem;
@@ -156,6 +165,7 @@
     <div id="city-range">—</div>
   </div>
   <div class="card">
+    <div id="clock">--:--</div>
     <h2>Last Updated</h2>
     <div class="stat" id="updated-rel">—</div>
     <div class="sub" id="updated-abs">—</div>
@@ -366,6 +376,14 @@ let weatherData = [];
     }).addTo(map);
   }
 })();
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 60000);
 
 setTimeout(() => location.reload(), 60 * 60 * 1000);
 </script>
