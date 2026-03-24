@@ -12,6 +12,7 @@ wheels/
 # Runtime data
 *.db
 *.log
+tile_cache/
 
 # Environment / OS
 .env

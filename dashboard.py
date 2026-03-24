@@ -4,12 +4,14 @@
 import json
 import logging
 import os
+import urllib.request
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, send_file
 
 from db import get_db, init_db
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+TILE_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tile_cache")
 
 app = Flask(__name__, static_folder="static")
 logger = logging.getLogger(__name__)
@@ -112,26 +114,26 @@ def api_city_summary():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/api/kiosk-log", methods=["POST"])
-def api_kiosk_log():
-    """Receive diagnostic logs from the kiosk client for server-side persistence."""
-    data = request.get_json(silent=True)
-    if not data or "entries" not in data:
-        return jsonify({"status": "error", "message": "missing entries"}), 400
-    for entry in data["entries"]:
-        level = entry.get("level", "info")
-        msg = entry.get("msg", "")
-        detail = entry.get("detail", "")
-        log_msg = f"[kiosk] {msg}"
-        if detail:
-            log_msg += f" | {detail}"
-        if level == "error":
-            logger.error(log_msg)
-        elif level == "warn":
-            logger.warning(log_msg)
-        else:
-            logger.info(log_msg)
-    return jsonify({"status": "ok", "received": len(data["entries"])})
+@app.route("/tiles/<int:z>/<int:x>/<int:y>.png")
+def tile_proxy(z, x, y):
+    cached = os.path.join(TILE_CACHE_DIR, str(z), str(x), f"{y}.png")
+    if os.path.exists(cached) and os.path.getsize(cached) > 0:
+        return send_file(cached, mimetype="image/png")
+    if os.path.exists(cached):
+        os.remove(cached)
+    subdomain = ["a", "b", "c", "d"][(x + y) % 4]
+    url = f"https://{subdomain}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "sf-weather-kiosk/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            tile_data = resp.read()
+    except Exception as e:
+        logger.warning("Tile fetch failed: %s", e)
+        return "", 502
+    os.makedirs(os.path.dirname(cached), exist_ok=True)
+    with open(cached, "wb") as f:
+        f.write(tile_data)
+    return send_file(cached, mimetype="image/png")
 
 
 if __name__ == "__main__":

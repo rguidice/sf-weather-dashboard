@@ -174,18 +174,6 @@
 </div>
 
 <script>
-// --- Kiosk diagnostic logging ---
-const KIOSK_LOG = [];
-const KIOSK_MAX_LOG = 200;
-function klog(level, msg, detail) {
-  const entry = { ts: new Date().toISOString(), level, msg };
-  if (detail !== undefined) entry.detail = detail;
-  KIOSK_LOG.push(entry);
-  if (KIOSK_LOG.length > KIOSK_MAX_LOG) KIOSK_LOG.shift();
-  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-  fn(`[kiosk ${level}] ${msg}`, detail !== undefined ? detail : '');
-}
-
 const NAMES = {
   financial_district: "Financial District", chinatown: "Chinatown", union_square: "Union Square",
   tenderloin: "Tenderloin", civic_center: "Civic Center", embarcadero: "Embarcadero",
@@ -245,28 +233,14 @@ function tempColor(f) {
 }
 
 if (typeof L === 'undefined') {
-  klog('error', 'Leaflet failed to load from CDN — scheduling reload in 30s');
   setTimeout(() => location.reload(), 30000);
 }
 
-klog('info', 'Initializing Leaflet map');
 const map = L.map('map', { center: [37.760, -122.440], zoom: 12.60, zoomSnap: 0, zoomControl: false, attributionControl: false });
 
-const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+L.tileLayer('/tiles/{z}/{x}/{y}.png', {
   maxZoom: 19
 }).addTo(map);
-
-let tilesLoaded = 0;
-let tileErrors = 0;
-tileLayer.on('tileload', () => { tilesLoaded++; });
-tileLayer.on('tileerror', (e) => {
-  tileErrors++;
-  klog('warn', 'Tile load error', { url: e.tile?.src, total_errors: tileErrors });
-});
-tileLayer.on('load', () => {
-  klog('info', `All visible tiles loaded: ${tilesLoaded} ok, ${tileErrors} errors`);
-});
 
 const labelLayer = L.layerGroup().addTo(map);
 
@@ -354,10 +328,10 @@ map.on('zoomend moveend', () => {
 });
 
 let weatherData = [];
-let renderComplete = false;
+let lastScrapeAt = null;
+let attributionAdded = false;
 
 async function fetchAndRender() {
-  klog('info', 'Starting data fetch');
   let latest, cfg, status;
   try {
     [latest, cfg, status] = await Promise.all([
@@ -365,47 +339,22 @@ async function fetchAndRender() {
         if (!r.ok) throw new Error(`/api/latest returned ${r.status}`);
         return r.json();
       }),
-      fetch('/api/config').then(r => r.json()).catch(e => {
-        klog('warn', '/api/config fetch failed, using defaults', e.message);
-        return {};
-      }),
-      fetch('/api/status').then(r => r.json()).catch(e => {
-        klog('warn', '/api/status fetch failed', e.message);
-        return {};
-      }),
+      fetch('/api/config').then(r => r.json()).catch(() => ({})),
+      fetch('/api/status').then(r => r.json()).catch(() => ({})),
     ]);
   } catch (e) {
-    klog('error', 'Data fetch failed — will retry in 30s', e.message);
     setTimeout(fetchAndRender, 30000);
     return;
   }
 
-  klog('info', `Fetched ${latest.length} neighborhoods`, {
-    has_config: !!cfg.favorite_neighborhood,
-    has_status: !!status.last_scrape
-  });
   weatherData = latest;
-
   if (!latest.length) {
-    klog('warn', '/api/latest returned empty array — will retry in 60s');
     setTimeout(fetchAndRender, 60000);
     return;
   }
 
-  // Tell Leaflet the map div's real size now that the sidebar is rendered
-  const mapEl = document.getElementById('map');
-  const mapRect = mapEl.getBoundingClientRect();
-  klog('info', 'Map container size before invalidateSize', {
-    width: mapRect.width, height: mapRect.height
-  });
   map.invalidateSize();
-
-  if (mapRect.width === 0 || mapRect.height === 0) {
-    klog('error', 'Map container has zero dimensions — layout may be broken');
-  }
-
   layoutLabels(latest);
-  klog('info', `Labels rendered for ${latest.length} neighborhoods`);
 
   // Card 1: Favorite neighborhood
   const fav = cfg.favorite_neighborhood;
@@ -418,13 +367,11 @@ async function fetchAndRender() {
     document.getElementById('fav-humidity').textContent = Math.round(favData.humidity) + '% humidity';
     document.getElementById('fav-humidity').style.color = '#06b6d4';
     document.getElementById('fav-name').textContent = favData.sensor_count + ' sensor' + (favData.sensor_count !== 1 ? 's' : '') + ' reporting';
-    klog('info', 'Favorite card populated', { neighborhood: fav, temp: favData.temp_f });
   } else {
     document.getElementById('fav-label').textContent = 'Your Neighborhood';
     document.getElementById('fav-temp').textContent = '—';
     document.getElementById('fav-name').textContent = 'Set favorite_neighborhood';
     document.getElementById('fav-humidity').textContent = 'in config.json';
-    klog('info', 'No favorite neighborhood data', { fav_key: fav, found: false });
   }
 
   // Card 2: City range
@@ -438,98 +385,34 @@ async function fetchAndRender() {
 
   // Card 3: Last updated
   if (status.last_scrape) {
-    document.getElementById('updated-rel').textContent = relTime(status.last_scrape.scraped_at);
+    lastScrapeAt = status.last_scrape.scraped_at;
+    document.getElementById('updated-rel').textContent = relTime(lastScrapeAt);
     document.getElementById('updated-abs').textContent = status.last_scrape.created_at_pacific || '';
   }
 
-  if (!cfg.hide_map_attribution) {
+  if (!attributionAdded && !cfg.hide_map_attribution) {
     L.control.attribution({
       prefix: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
     }).addTo(map);
+    attributionAdded = true;
   }
-
-  renderComplete = true;
-  klog('info', 'Render complete');
 }
 
-// Run initial fetch/render
 fetchAndRender();
-
-// --- Render health check ---
-// After 15s, verify the page actually rendered. If not, force a retry.
-setTimeout(() => {
-  if (!renderComplete) {
-    klog('error', 'Render not complete after 15s — retrying fetchAndRender');
-    fetchAndRender();
-  }
-
-  // Check that labels actually appeared on the map
-  const labelCount = labelLayer.getLayers().length;
-  if (labelCount === 0 && weatherData.length > 0) {
-    klog('error', 'Labels missing from map despite having data — re-rendering labels');
-    map.invalidateSize();
-    layoutLabels(weatherData);
-  }
-
-  // Check map container dimensions
-  const rect = document.getElementById('map').getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) {
-    klog('error', 'Map still has zero dimensions after 15s — reloading page');
-    location.reload();
-  }
-}, 15000);
+// Refresh weather data every 2 hours (matches scrape interval)
+setInterval(fetchAndRender, 2 * 60 * 60 * 1000);
 
 function updateClock() {
   const now = new Date();
   document.getElementById('clock').textContent =
     now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  if (lastScrapeAt) {
+    document.getElementById('updated-rel').textContent = relTime(lastScrapeAt);
+  }
 }
 updateClock();
 setInterval(updateClock, 60000);
 
-// --- Resilient auto-reload ---
-// Instead of a blind reload, verify the server is reachable first.
-// If not, retry every 30s until it is, then reload.
-async function safeReload() {
-  klog('info', 'Hourly reload triggered — checking server health');
-  try {
-    const resp = await fetch('/api/status', { signal: AbortSignal.timeout(10000) });
-    if (resp.ok) {
-      klog('info', 'Server healthy — reloading');
-      location.reload();
-    } else {
-      klog('warn', `Server returned ${resp.status} — will retry in 30s`);
-      setTimeout(safeReload, 30000);
-    }
-  } catch (e) {
-    klog('error', 'Server unreachable for reload — will retry in 30s', e.message);
-    setTimeout(safeReload, 30000);
-  }
-}
-setTimeout(safeReload, 60 * 60 * 1000);
-
-// --- Ship logs to server for journalctl persistence ---
-let lastShippedIndex = 0;
-async function shipLogs() {
-  if (KIOSK_LOG.length <= lastShippedIndex) return;
-  const entries = KIOSK_LOG.slice(lastShippedIndex);
-  lastShippedIndex = KIOSK_LOG.length;
-  try {
-    await fetch('/api/kiosk-log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries }),
-    });
-  } catch (e) {
-    // Server unreachable — logs stay in KIOSK_LOG for next attempt
-    lastShippedIndex -= entries.length;
-  }
-}
-// Ship logs every 30s and on page unload
-setInterval(shipLogs, 30000);
-window.addEventListener('beforeunload', shipLogs);
-// Ship initial logs after first render settles
-setTimeout(shipLogs, 5000);
 </script>
 </body>
 </html>
