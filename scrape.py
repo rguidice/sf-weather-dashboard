@@ -67,7 +67,6 @@ NEIGHBORHOODS = {
     "hunters_point": (37.7247, -122.3786),
     "excelsior": (37.7253, -122.4250),
     "visitacion_valley": (37.7147, -122.4052),
-    "crocker_amazon": (37.7100, -122.4343),
     "ingleside": (37.7235, -122.4476),
     "oceanview": (37.7179, -122.4569),
     "merced_heights": (37.7170, -122.4470),
