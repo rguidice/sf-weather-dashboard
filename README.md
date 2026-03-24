@@ -47,7 +47,7 @@ There's also a `scrape_log` table that records metadata about each scrape run (h
 | `GET /api/status` | Last scrape metadata and total scrape count |
 | `GET /api/config` | Server-side config (favorite neighborhood) |
 | `GET /api/city-summary?days=7` | Daily city-wide averages |
-| `POST /api/kiosk-log` | Receives diagnostic logs from the kiosk client (viewable via `journalctl`) |
+| `GET /tiles/<z>/<x>/<y>.png` | Tile proxy — caches CARTO map tiles to disk for the kiosk display |
 
 ## Configuration
 
@@ -80,7 +80,7 @@ To disable, set it to `""`, delete `config.json`, or remove the key entirely. Ed
 
 ## Kiosk display
 
-`/kiosk` is a purpose-built wall display page: a full-screen Leaflet map with a sidebar showing your favorite neighborhood's current conditions, city-wide temp range, and last-updated time. It auto-reloads every hour to pick up new scrape data. My client and hardware implementation is captured in [sf-weather-display](https://github.com/rguidice/sf-weather-display).
+`/kiosk` is a purpose-built wall display page: a full-screen Leaflet map with a sidebar showing your favorite neighborhood's current conditions, city-wide temp range, and last-updated time. Weather data refreshes in-place every 2 hours (matching the scrape interval) without reloading the page. Map tiles are served through a local caching proxy (`/tiles/`) so they only need to be fetched from CARTO once — subsequent loads serve from disk (`tile_cache/`). To clear the tile cache: `rm -rf tile_cache/`. My client and hardware implementation is captured in [sf-weather-display](https://github.com/rguidice/sf-weather-display).
 
 This mode was purpose-built for my application. Please review [sf-weather-display](https://github.com/rguidice/sf-weather-display) to understand the limitations.
 

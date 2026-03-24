@@ -399,8 +399,17 @@ async function fetchAndRender() {
 }
 
 fetchAndRender();
-// Refresh weather data every 2 hours (matches scrape interval)
-setInterval(fetchAndRender, 2 * 60 * 60 * 1000);
+// Refresh weather data at :05 past every even hour (shortly after cron scrape)
+function scheduleNextRefresh() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setMinutes(5, 0, 0);
+  // Advance to next even hour
+  if (next.getHours() % 2 !== 0) next.setHours(next.getHours() + 1);
+  if (next <= now) next.setHours(next.getHours() + 2);
+  setTimeout(() => { fetchAndRender(); scheduleNextRefresh(); }, next - now);
+}
+scheduleNextRefresh();
 
 function updateClock() {
   const now = new Date();
