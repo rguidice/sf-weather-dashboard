@@ -97,6 +97,11 @@
     color: var(--muted);
     white-space: nowrap;
   }
+  .card.stale #updated-rel,
+  .card.stale h2,
+  .card.stale .sub {
+    color: #e74c3c;
+  }
   #clock {
     font-size: 3rem;
     font-weight: 700;
@@ -388,6 +393,7 @@ async function fetchAndRender() {
     lastScrapeAt = status.last_scrape.scraped_at;
     document.getElementById('updated-rel').textContent = relTime(lastScrapeAt);
     document.getElementById('updated-abs').textContent = status.last_scrape.created_at_pacific || '';
+    updateStaleState();
   }
 
   if (!attributionAdded && !cfg.hide_map_attribution) {
@@ -411,12 +417,22 @@ function scheduleNextRefresh() {
 }
 scheduleNextRefresh();
 
+function updateStaleState() {
+  const card = document.getElementById('updated-rel').closest('.card');
+  if (lastScrapeAt && (Date.now() / 1000 - lastScrapeAt) > 86400) {
+    card.classList.add('stale');
+  } else {
+    card.classList.remove('stale');
+  }
+}
+
 function updateClock() {
   const now = new Date();
   document.getElementById('clock').textContent =
     now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   if (lastScrapeAt) {
     document.getElementById('updated-rel').textContent = relTime(lastScrapeAt);
+    updateStaleState();
   }
 }
 updateClock();
