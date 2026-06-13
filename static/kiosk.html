@@ -334,6 +334,7 @@ map.on('zoomend moveend', () => {
 
 let weatherData = [];
 let lastScrapeAt = null;
+let scrapeIntervalHours = 2;
 let attributionAdded = false;
 
 async function fetchAndRender() {
@@ -360,6 +361,8 @@ async function fetchAndRender() {
 
   map.invalidateSize();
   layoutLabels(latest);
+
+  scrapeIntervalHours = cfg.scrape_interval_hours;
 
   // Card 1: Favorite neighborhood
   const fav = cfg.favorite_neighborhood;
@@ -419,7 +422,7 @@ scheduleNextRefresh();
 
 function updateStaleState() {
   const card = document.getElementById('updated-rel').closest('.card');
-  if (lastScrapeAt && (Date.now() / 1000 - lastScrapeAt) > 86400) {
+  if (lastScrapeAt && (Date.now() - new Date(lastScrapeAt).getTime()) > scrapeIntervalHours * 3 * 3600000) {
     card.classList.add('stale');
   } else {
     card.classList.remove('stale');
