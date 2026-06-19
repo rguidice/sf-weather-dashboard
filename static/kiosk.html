@@ -335,6 +335,7 @@ map.on('zoomend moveend', () => {
 let weatherData = [];
 let lastScrapeAt = null;
 let scrapeIntervalHours = 2;
+let staleThresholdMultiplier = 3;
 let attributionAdded = false;
 
 async function fetchAndRender() {
@@ -363,6 +364,7 @@ async function fetchAndRender() {
   layoutLabels(latest);
 
   scrapeIntervalHours = cfg.scrape_interval_hours;
+  if (cfg.stale_threshold_multiplier != null) staleThresholdMultiplier = cfg.stale_threshold_multiplier;
 
   // Card 1: Favorite neighborhood
   const fav = cfg.favorite_neighborhood;
@@ -422,7 +424,7 @@ scheduleNextRefresh();
 
 function updateStaleState() {
   const card = document.getElementById('updated-rel').closest('.card');
-  if (lastScrapeAt && (Date.now() - new Date(lastScrapeAt).getTime()) > scrapeIntervalHours * 3 * 3600000) {
+  if (lastScrapeAt && (Date.now() - new Date(lastScrapeAt).getTime()) > scrapeIntervalHours * staleThresholdMultiplier * 3600000) {
     card.classList.add('stale');
   } else {
     card.classList.remove('stale');

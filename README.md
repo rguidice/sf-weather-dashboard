@@ -65,7 +65,8 @@ Edit `config.json` in the project directory (created from `config.example.json` 
 |---|---|---|
 | `purpleair_api_key` | **Yes** | Your PurpleAir API read key. Get one at [develop.purpleair.com](https://develop.purpleair.com) |
 | `favorite_neighborhood` | No | Snake_case neighborhood key (e.g. `noe_valley`). Highlights a row in the table and adds a card at the top of the dashboard |
-| `scrape_interval_hours` | No | Hours between scrapes (default: `2`). `setup.sh` uses this to generate the cron schedule |
+| `scrape_interval_hours` | No | Hours between scrapes (default: `2`). `setup.sh` generates a cron schedule of `0 */2 * * *` from this value |
+| `stale_threshold_multiplier` | No | Kiosk shows last-updated text in red when data age exceeds `scrape_interval_hours × multiplier` (default: `3`, i.e. 6 hours). Raise to `5` if you stop scraping overnight (see below) |
 | `hide_map_attribution` | No | `true` hides OSM/CARTO map attribution on kiosk (default: `false`) |
 
 ### Favorite neighborhood
@@ -126,7 +127,8 @@ The script will:
 - Install `uv` if not already present
 - Create a virtualenv and install Flask
 - Initialize the SQLite database
-- Set up a **cron job** to scrape at the configured interval (default: every 2 hours)
+- Set up a **cron job** to scrape at the configured interval (default: `0 */2 * * *`, i.e. every 2 hours).
+    - To reduce API usage, you can manually replace this with a 10pm-6am schedule like `0 6,8,10,12,14,16,18,20,22 * * *` — set `"stale_threshold_multiplier": 5` in `config.json` if you do
 - Create and start a **systemd service** (Flask on port 8080)
 - **Redirect port 80 → 8080** via iptables so no port suffix is needed in URLs (see options below)
 - Set up an **mDNS alias** so `http://weather.local` works from any device on your network (see options below)
